@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum SlotStatus {
+  FREE
+  OCCUPIED
+  OUT_OF_SERVICE
+}
+
+enum PaymentMethod {
+  CARD
+  UPI
+  CASH
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  name          String
+  email         String         @unique
+  password      String
+  role          Role           @default(USER)
+  bookings      Booking[]
+  notifications Notification[]
+  usageLogs     UsageLog[]     @relation("UserUsageLogs")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Station {
+  id         Int        @id @default(autoincrement())
+  name       String     @unique
+  location   String?
+  latitude   Float?
+  longitude  Float?
+  totalSlots Int        @default(0)
+  slots      Slot[]
+  bookings   Booking[]
+  usageLogs  UsageLog[] @relation("StationUsageLogs")
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Slot {
+  id        Int        @id @default(autoincrement())
+  station   Station    @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  stationId Int
+  number    Int
+  status    SlotStatus @default(FREE)
+  bookings  Booking[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([stationId, number])
+}
+
+model Booking {
+  id        Int           @id @default(autoincrement())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  station   Station       @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  stationId Int
+  slot      Slot?         @relation(fields: [slotId], references: [id])
+  slotId    Int?
+  slotTime  DateTime
+  urgent    Boolean       @default(false)
+  status    BookingStatus @default(PENDING)
+  payment   Payment?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model Payment {
+  id        Int           @id @default(autoincrement())
+  booking   Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId Int           @unique
+  amount    Float
+  method    PaymentMethod
+  status    PaymentStatus @default(PENDING)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model UsageLog {
+  id        Int      @id @default(autoincrement())
+  stationId Int
+  userId    Int?
+  event     String
+  timestamp DateTime @default(now())
+
+  station Station @relation("StationUsageLogs", fields: [stationId], references: [id])
+  user    User?   @relation("UserUsageLogs", fields: [userId], references: [id])
+}
