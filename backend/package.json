@@ -35,3 +35,12 @@
     "seed": "node prisma/seed.js"
   }
 }
+{
+  "scripts": {
+    "dev": "node src/index.js",
+    "start": "node src/index.js",
+    "build": "echo \"(skip if JS; use tsc if TS)\"",
+    "prisma:generate": "prisma generate",
+    "prisma:deploy": "prisma migrate deploy"
+  }
+}
