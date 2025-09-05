@@ -6,10 +6,15 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
+    "build": "echo \"(skip if JS; use tsc if TS)\"",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "prisma:deploy": "prisma migrate deploy"
+  },
+  "engines": {
+    "node": "18"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
