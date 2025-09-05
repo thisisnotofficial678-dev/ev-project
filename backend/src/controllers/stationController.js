@@ -6,6 +6,19 @@ import path from "path";
 
 const LOG_FILE = path.join(process.cwd(), "ml", "usage_logs.csv");
 
+// --- helper: approximate distance (fallback when routing API fails)
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const toRad = (v) => (v * Math.PI) / 180;
+  const R = 6371; // km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 // 📌 Helper to append usage logs for ML retraining
 function logUsage(stationId, loadFactor, freeSlots, recommended, urgent) {
   const now = new Date();
@@ -110,8 +123,7 @@ export const getStationById = async (req, res) => {
       where: { id },
       include: { slots: true },
     });
-    if (!station)
-      return res.status(404).json({ message: "Station not found" });
+    if (!station) return res.status(404).json({ message: "Station not found" });
     res.json(station);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -172,21 +184,20 @@ export const getNearestStations = async (req, res) => {
     const results = await Promise.all(
       stations.map(async (station) => {
         try {
-          const url = `https://api.geoapify.com/v1/routing?waypoints=${lat},${lng}|${station.latitude},${station.longitude}&mode=drive&traffic=enabled&apiKey=${apiKey}`;
+          // ✅ Use provider-supported mode (drive). Removed traffic=enabled.
+          const url = `https://api.geoapify.com/v1/routing?waypoints=${lat},${lng}|${station.latitude},${station.longitude}&mode=drive&apiKey=${apiKey}`;
           const response = await axios.get(url);
 
           const route = response.data.features[0];
+          if (!route) throw new Error("No route found");
+
           const etaMinutes = Math.round(route.properties.time / 60);
           const distanceKm = (route.properties.distance / 1000).toFixed(2);
 
           const totalSlots = station.slots.length;
-          const freeSlots = station.slots.filter(
-            (s) => s.status === "FREE"
-          ).length;
-          const loadFactor =
-            totalSlots > 0 ? (totalSlots - freeSlots) / totalSlots : 1;
+          const freeSlots = station.slots.filter((s) => s.status === "FREE").length;
+          const loadFactor = totalSlots > 0 ? (totalSlots - freeSlots) / totalSlots : 1;
 
-          // 🔮 AI prediction
           const predictedAvailability = await getPrediction(
             station.id,
             loadFactor,
@@ -200,10 +211,7 @@ export const getNearestStations = async (req, res) => {
             predictedAvailability * 10;
 
           if (urgent === "true") {
-            score =
-              etaMinutes * 0.9 +
-              loadFactor * 10 -
-              predictedAvailability * 5;
+            score = etaMinutes * 0.9 + loadFactor * 10 - predictedAvailability * 5;
           }
 
           return {
@@ -219,20 +227,65 @@ export const getNearestStations = async (req, res) => {
             score,
           };
         } catch (error) {
+          // ⛑️ Log provider error & use haversine fallback so we don't drop the station entirely
           console.error(
             `ETA error for station ${station.id}:`,
-            error.message
+            error?.response?.data ?? error.message ?? error
           );
-          return null;
+
+          try {
+            const userLat = Number(lat);
+            const userLng = Number(lng);
+            const stLat = Number(station.latitude);
+            const stLng = Number(station.longitude);
+
+            const distKm = haversineKm(userLat, userLng, stLat, stLng);
+            const avgSpeedKmph = 40;
+            const etaMinutes = Math.max(1, Math.round((distKm / avgSpeedKmph) * 60));
+
+            const totalSlots = station.slots.length;
+            const freeSlots = station.slots.filter((s) => s.status === "FREE").length;
+            const loadFactor = totalSlots > 0 ? (totalSlots - freeSlots) / totalSlots : 1;
+
+            const predictedAvailability = await getPrediction(
+              station.id,
+              loadFactor,
+              freeSlots
+            );
+
+            let score =
+              etaMinutes * 0.6 +
+              loadFactor * 30 +
+              distKm * 0.2 -
+              predictedAvailability * 10;
+
+            if (urgent === "true") {
+              score = etaMinutes * 0.9 + loadFactor * 10 - predictedAvailability * 5;
+            }
+
+            return {
+              id: station.id,
+              name: station.name,
+              latitude: station.latitude,
+              longitude: station.longitude,
+              availableSlots: freeSlots,
+              etaMinutes,
+              distanceKm: distKm.toFixed(2),
+              loadFactor: loadFactor.toFixed(2),
+              predictedAvailability,
+              score,
+            };
+          } catch (fallbackErr) {
+            console.error(`Fallback ETA error for station ${station.id}:`, fallbackErr);
+            return null;
+          }
         }
       })
     );
 
     const validStations = results.filter((s) => s !== null);
     if (validStations.length === 0) {
-      return res
-        .status(500)
-        .json({ error: "Failed to calculate station ETAs" });
+      return res.status(500).json({ error: "Failed to calculate station ETAs" });
     }
 
     const sortedStations = validStations.sort((a, b) => a.score - b.score);
@@ -258,8 +311,6 @@ export const getNearestStations = async (req, res) => {
     });
   } catch (error) {
     console.error("Smart Recommendation Error:", error.message);
-    res
-      .status(500)
-      .json({ error: "Failed to recommend station" });
+    res.status(500).json({ error: "Failed to recommend station" });
   }
 };
