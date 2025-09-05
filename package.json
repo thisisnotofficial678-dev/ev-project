@@ -1,0 +1,22 @@
+{
+  "name": "ev-project",
+  "version": "1.0.0",
+  "description": "EV Charging Station Management System",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:user\" \"npm run dev:admin\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:user": "cd frontend/ev-user && npm run dev",
+    "dev:admin": "cd frontend/ev-admin/project && npm run dev",
+    "build": "npm run build:user && npm run build:admin",
+    "build:user": "cd frontend/ev-user && npm run build",
+    "build:admin": "cd frontend/ev-admin/project && npm run build",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend/ev-user && npm install && cd ../ev-admin/project && npm install",
+    "start": "cd backend && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["ev", "charging", "station", "management"],
+  "author": "",
+  "license": "MIT"
+}

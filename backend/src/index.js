@@ -49,7 +49,20 @@ io.on("connection", (socket) => {
 app.set("io", io);
 app.set("userSockets", userSockets);
 
-app.use(cors());
+// Configure CORS for frontend integration
+app.use(cors({
+  origin: [
+    'http://localhost:5173', // ev-user frontend (dev)
+    'http://localhost:5174', // ev-admin frontend (dev)
+    'https://ev-user-app.vercel.app', // ev-user frontend (production)
+    'https://ev-admin-app.vercel.app', // ev-admin frontend (production)
+    process.env.FRONTEND_URL,
+    process.env.ADMIN_URL
+  ].filter(Boolean),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 app.use(express.json());
 app.use(morgan("dev"));
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

@@ -1,12 +1,37 @@
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { useState } from "react";
 
 const SignupPage: React.FC = () => {
   const navigate = useNavigate();
+  const { register, loading, error } = useAuth();
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    vehicleType: "",
+    password: ""
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert("Signed up (demo)");
-    navigate("/login");
+    setIsSubmitting(true);
+    try {
+      await register(formData);
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Registration failed:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
   };
 
   return (
